@@ -1,4 +1,6 @@
 use home;
+use lazy_static::lazy_static;
+use regex::Regex;
 use std::io::{Read, Write};
 use std::process::Command;
 use std::process::Stdio;
@@ -6,6 +8,11 @@ use std::str;
 use sysinfo::{CpuExt, System, SystemExt};
 
 use crate::logo::*;
+
+lazy_static! {
+    static ref GPU_RE: Regex =
+        Regex::new(r#"^\S+? "(VGA|3D|Display).*?" ".*?" "(?P<gpu>.*?)""#).unwrap();
+}
 
 pub fn get_logo(sys: &System) -> Option<String> {
     sys.name().map(|sys_name| {
@@ -244,7 +251,7 @@ pub fn get_cpu_name(sys: &System) -> Option<String> {
 
 pub fn get_gpu_name(sys: &System) -> Option<String> {
     // works on wsl, needs formatting and grep: lspci | grep -i --color 'vga\|3d\|2d'
-    sys.name().map(|sys_name| {
+    sys.name().and_then(|sys_name| {
         // Windows
         if sys_name.contains("Windows") {
             let win_fetch_gpu = Command::new("wmic")
@@ -266,47 +273,35 @@ pub fn get_gpu_name(sys: &System) -> Option<String> {
                 .chain(processed_gpu_name.chars().skip(4))
                 .collect();
 
-            let final_gpu_name = format!("\x1b[93;1m{}\x1b[0m: {}", "GPU", trimmed_gpu_name.trim());
-            final_gpu_name
+            Some(format!(
+                "\x1b[93;1m{}\x1b[0m: {}",
+                "GPU",
+                trimmed_gpu_name.trim()
+            ))
         // Linux
         } else {
-            // lspci | grep -i --color 'vga\|3d\|2d'
-            let mut cmd_lspci = Command::new("lspci")
+            let cmd_lspci = Command::new("lspci")
+                .args(["-mm"])
                 .stdout(Stdio::piped())
                 .spawn()
-                .unwrap();
+                .ok()?;
+            let lspci_out = cmd_lspci.wait_with_output().ok()?.stdout;
 
-            let mut cmd_grep = Command::new("grep")
-                .args(["-i", "--color", "\'vga\\|3d\\|2d\'"])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .spawn()
-                .unwrap();
-
-            if let Some(ref mut stdout) = cmd_lspci.stdout {
-                if let Some(ref mut stdin) = cmd_grep.stdin {
-                    let mut buf: Vec<u8> = Vec::new();
-                    stdout.read_to_end(&mut buf).unwrap();
-                    stdin.write_all(&buf).unwrap();
-                }
-            }
-
-            let gpu_name_buf = cmd_grep.wait_with_output().unwrap().stdout;
-
-            let processed_gpu_name = match str::from_utf8(&gpu_name_buf) {
-                Ok(result) => result,
-                Err(e) => panic!("Failed to process Win32 GPU data: {:?}", e),
-            };
-
-            // let sys_friendly_num = &String::from_utf8(res).unwrap()[16..];
-            // let sys_friendly_num_no_whitespace = &sys_friendly_num[..sys_friendly_num.len() - 1];
-
-            let mut processed_gpu_no_newline = String::from(processed_gpu_name);
-            processed_gpu_no_newline.pop();
-            let final_sys_name =
-                format!("\x1b[93;1m{}\x1b[0m: {}", "GPU", processed_gpu_no_newline);
-
-            final_sys_name
+            use std::io::{BufRead, BufReader};
+            Some(
+                BufReader::new(&lspci_out[..])
+                    .lines()
+                    .flat_map(|l| {
+                        l.ok().and_then(|l| {
+                            GPU_RE
+                                .captures(&l)
+                                .and_then(|c| c.name("gpu").map(|c| c.as_str().to_owned()))
+                        })
+                    })
+                    .map(|g| format!("\x1b[93;1m{}\x1b[0m: {}", "GPU", g))
+                    .collect::<Vec<String>>()
+                    .join("\n"),
+            )
         }
     })
 }
