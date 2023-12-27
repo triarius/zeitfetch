@@ -1,8 +1,8 @@
+use unicode_segmentation::UnicodeSegmentation;
+
 /// Truncate a string, ignoring ANSI graphics, but preserving trailing ANSI
 /// graphics past the truncation point.
 pub fn truncate(s: &str, n: usize) -> String {
-    use unicode_segmentation::UnicodeSegmentation;
-
     #[derive(Debug, PartialEq, Eq)]
     enum State {
         Normal,
@@ -45,6 +45,22 @@ pub fn truncate(s: &str, n: usize) -> String {
     }
 
     out
+}
+
+// length of string, ignoring ANSI graphics
+pub fn len(s: &str) -> usize {
+    let mut count = 0;
+    let mut in_ansi = false;
+    for g in s.graphemes(true) {
+        if g == "\x1b" {
+            in_ansi = true;
+        } else if g == "m" && in_ansi {
+            in_ansi = false;
+        } else if !in_ansi {
+            count += 1;
+        }
+    }
+    count
 }
 
 #[cfg(test)]

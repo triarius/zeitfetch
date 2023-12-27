@@ -25,22 +25,23 @@ fn generate_info(ctx: &cli::Ctx) -> Result<(), Box<dyn std::error::Error>> {
 
     let logo = scanner::get_logo(&sys);
     let logo_col = logo.unwrap_or_else(|| "".into());
+    let logo_width = logo_col.lines().map(ansi::len).max().unwrap_or(0);
 
     let mut table = Table::new();
     table.set_format(*format::consts::FORMAT_CLEAN);
 
     // Check ctx and generate according tables
     if ctx.args.no_logo {
-        let sys_info_col = full_sys_info_col(&sys, ctx);
+        let sys_info_col = full_sys_info_col(&sys, ctx, logo_width);
         table.add_row(row![&sys_info_col]);
     } else if ctx.args.minimal {
-        let sys_info_col = minimal_sys_info_col(&sys, ctx);
+        let sys_info_col = minimal_sys_info_col(&sys, ctx, logo_width);
         table.add_row(row![&logo_col]);
         table.add_row(row![&sys_info_col]);
     } else if ctx.args.logo_only {
         table.add_row(row![&logo_col]);
     } else {
-        let sys_info_col = full_sys_info_col(&sys, ctx);
+        let sys_info_col = full_sys_info_col(&sys, ctx, logo_width);
         table.add_row(row![&logo_col, &sys_info_col]);
     }
     let mut buf = Vec::new();
@@ -57,8 +58,8 @@ fn generate_info(ctx: &cli::Ctx) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn full_sys_info_col(sys: &System, ctx: &cli::Ctx) -> String {
-    let user_prompt = scanner::get_user_prompt(sys, ctx);
+fn full_sys_info_col(sys: &System, ctx: &cli::Ctx, logo_width: usize) -> String {
+    let user_prompt = scanner::get_user_prompt(sys, ctx, logo_width);
     let sys_name = scanner::get_sys_name(sys);
     let host_name = scanner::get_host_name(sys);
     let uptime = scanner::get_uptime(sys);
@@ -95,6 +96,6 @@ fn full_sys_info_col(sys: &System, ctx: &cli::Ctx) -> String {
     .join("\n")
 }
 
-fn minimal_sys_info_col(sys: &System, ctx: &cli::Ctx) -> String {
-    scanner::get_user_prompt(sys, ctx).unwrap_or_else(|| "".into())
+fn minimal_sys_info_col(sys: &System, ctx: &cli::Ctx, logo_width: usize) -> String {
+    scanner::get_user_prompt(sys, ctx, logo_width).unwrap_or_else(|| "".into())
 }

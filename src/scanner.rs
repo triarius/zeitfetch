@@ -60,7 +60,7 @@ pub fn get_logo(sys: &System) -> Option<String> {
     })
 }
 
-pub fn get_user_prompt(sys: &System, ctx: &Ctx) -> Option<String> {
+pub fn get_user_prompt(sys: &System, ctx: &Ctx, logo_width: usize) -> Option<String> {
     match (sys.name(), home::home_dir(), sys.host_name()) {
         (Some(os), Some(home_dir), Some(host_name)) => {
             let path = String::from(home_dir.to_string_lossy());
@@ -78,15 +78,19 @@ pub fn get_user_prompt(sys: &System, ctx: &Ctx) -> Option<String> {
                 username, host_name
             );
             // Extra 1 for @ character
-            let total_width = host_name.len() + username.len() + 1;
-            let linebreak = "-".repeat(total_width);
+            let prompt_width = host_name.len() + username.len() + 1;
+            let linebreak = "-".repeat(prompt_width);
 
             // Used solely in --minimal logo + user prompt output
             let final_user_prompt = if !ctx.args.minimal {
                 format!("{}\n{}", user_prompt, linebreak)
             } else {
-                // TO-DO optimize this based on logo width (store in ctx) to properly center. currently optimized for debian, macOS
-                format!("    {}\n    {}", linebreak, user_prompt)
+                // logo_width - prompt_width is the total whitespace, half of it is the offset
+                // it looks a bit better when rounded up
+                let offset = (logo_width - prompt_width) / 2 + (logo_width - prompt_width) % 2;
+                let line1 = format!("{}{}", " ".repeat(offset), linebreak);
+                let line2 = format!("{}{}", " ".repeat(offset), user_prompt);
+                format!("{}\n{}", line1, line2)
             };
             Some(final_user_prompt)
         }
